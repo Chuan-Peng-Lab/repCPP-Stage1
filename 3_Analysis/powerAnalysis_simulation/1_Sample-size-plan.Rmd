@@ -1,0 +1,190 @@
+---
+title: "1_Sample_size"
+author: "Yuanrui Zheng"
+date: "`r Sys.Date()`"
+output: html_document
+---
+# Import packages
+```{r import neccessary packages}
+# load package
+# if 'pacman' is not exist, this package can be installed
+if (!require('pacman')) {install.packages('pacman')}
+# the package 'pacman' can use 'p_load' to load existed package or install package
+library(pacman)
+pacman::p_load('tidyverse', # this package used to preprocess the raw data
+               'here', # this package can set the working directory as the root directory the script exist
+               'papaja',# this package can create the manuscripts to APA.
+               'effectsize', 
+               "pwr", 
+               "BUCSS") 
+# set directory
+pack_info <- sessionInfo() # store the information of packages
+here::set_here()
+print(getwd()) # print the path
+```
+
+
+# Experiment 1
+
+## effect size
+
+```{r effect size of exp1}
+# original paper:  t-test results: t(18)=3.4,P=0.003
+(result1_LHB <- effectsize::t_to_d(
+  t = c(3.4),
+  df = 18,
+  paired = TRUE
+))
+# original paper: t(18)=4.0,P=0.0009
+(result1_CPP <- effectsize::t_to_d(
+  t = c(4.0),
+  df = 18,
+  paired = TRUE
+))
+
+# use the lower CI of effect size
+LHB_lowereff <- result1_LHB[1, 3]
+CPP_lowereff <- result1_CPP[1, 3]
+```
+
+## power analysis
+### Using the lower CI of effect size (conservative)
+```{r}
+find_value <- function(dir = 'min', ...) {
+  values <- c(...) # 将输入参数转为向量
+  if (dir == 'min') {
+    return(min(values)) # 返回最小值
+  } else if (dir == 'max') {
+    return(max(values)) # 返回最大值
+  } else {
+    stop("only 'min' 或 'max'") # 如果dir参数不为'min'或'max'，则报错
+  }
+}
+  
+
+pwr_result1 <- pwr::pwr.t.test(d = find_value(dir = 'min', LHB_lowereff, 
+                                  CPP_lowereff),  # get the smaller effect size between two value
+               sig.level = 0.05, 
+                power = 0.80, 
+               type = "pair", 
+               alternative = "greater"
+                )
+(sample_size1 <- pwr_result1[["n"]]) # get the sample size of experimental 1
+```
+
+### Using the BUCSS (correct bias and uncertainty)
+```{r}
+LHB_adjust_ss <- ss.power.dt(3.4, 19, alpha.prior = 0.05, alpha.planned = 0.05,
+assurance = 0.8, power = 0.8)[[1]]
+
+CPP_adjust_ss <- ss.power.dt(4.0, 19, alpha.prior = 0.05, alpha.planned = 0.05,
+assurance = 0.8, power = 0.8)[[1]]
+find_value('max', LHB_adjust_ss, CPP_adjust_ss)
+```
+
+
+### using beta distribution and lower CI to simulate
+
+```{r}
+library(effectsize)
+
+set.seed(123)
+
+
+target_function <- function(params) {
+  sim_n <- 1000000  # 1 million data
+  alpha <- params[1]
+  beta <- params[2]
+  
+  # simulate data
+  diff <- rbeta(sim_n, shape1 = alpha, shape2 = beta)# diff of two sample
+  
+  
+  # t 检验
+  t_test <- t.test(diff, mu = 0)#t test
+  
+  # (Cohen's d)
+  d <- effectsize::t_to_d(t = as.numeric(t_test$statistic), df_error = sim_n - 1, paired = TRUE)$d
+  d <- as.numeric(d)
+  
+  # target value
+  target_d <- find_value(dir = 'min', LHB_lowereff, CPP_lowereff)
+  
+  # get the difference square
+  return((d - target_d)^2)
+}
+
+# optimize the parameters
+initial_params <- c(1, 1)  # inite the parameter
+
+# 设置优化算法的严格性
+result <- optim(
+  initial_params, 
+  target_function, 
+  method = "L-BFGS-B",
+  lower = c(0.01, 0.01),  # Beta shape can only be positive
+  control = list(fnscale = 1, factr = 1e3, pgtol = 1e-10)  # set some parameters
+)
+# 输出结果
+cat("优化后的aplha:", result$par[1], "\n")
+cat("优化后的beta:", result$par[2], "\n")
+cat("beta的Cohen's d:", sqrt(result$value) + find_value(dir = 'min', LHB_lowereff, CPP_lowereff), "\n")
+cat("原始效应量: ", find_value(dir = 'min', LHB_lowereff, CPP_lowereff), "\n")
+
+
+```
+
+```{r}
+set.seed(123)
+n_sims <- 1000  # Number of simulations
+target_power <- 0.80  # Target power
+effect_size <- find_value(dir = 'min', LHB_lowereff, CPP_lowereff)  # True effect size (mean difference)
+type1_err <- 0.05
+alpha <- result$par[1]
+beta <- result$par[2]
+n <- 5  # Initial sample size
+max_n <- 200
+power_at_n <- numeric()  # Store power for each sample size
+cohens_ds_at_n <- numeric()  # Store mean Cohen's d for each sample size
+
+while(TRUE) {
+  p_vals <- numeric(n_sims)  # Preallocate p-value storage
+  cohens_ds <- numeric(n_sims)  # Preallocate Cohen's d storage
+  
+  for(sim in 1:n_sims) {
+    difference <- rbeta(n, shape1 = alpha, shape2 = beta)  # Simulate the difference scores
+    t_test_result <- t.test(difference, mu = 0)  # Run t-test
+    p_vals[sim] <- t_test_result$p.value  # Extract p-value
+    d <- effectsize::t_to_d(
+      t = t_test_result$statistic, 
+      df_error = n - 1, paired = TRUE)$d   # Calculate Cohen's d
+    cohens_ds[sim] <- as.numeric(d)
+  }
+  # Calculate power and mean Cohen's d for current sample size
+  power_at_n <- c(power_at_n, mean(p_vals < type1_err))
+  cohens_ds_at_n <- c(cohens_ds_at_n, mean(cohens_ds))
+  
+  # Check if the target power has been achieved
+  if (power_at_n[length(power_at_n)] >= target_power & n >=  max_n) {
+    break
+  }
+  
+  n <- n + 1  # Increase sample size
+}
+
+# Find the sample size where power reaches or exceeds 0.8
+n_at_target_power <- which(power_at_n >= target_power)[1] + 4  
+# Adjusting for initial sample size (n starts from 5)
+
+plot(5:n, power_at_n, xlab = "Sample Size", ylab = "Power", main = "Power vs Sample Size")
+abline(h = target_power, col = "red", lty = 2)
+points(n_at_target_power, power_at_n[n_at_target_power - 4], col = "blue", pch = 19)
+text(n_at_target_power, power_at_n[n_at_target_power - 4], labels = paste("n =", n_at_target_power), pos = 4)
+
+# Plot Cohen's d vs sample size
+plot(5:n, cohens_ds_at_n, xlab = "Sample Size", ylab = "Mean Cohen's d", main = "Cohen's d vs Sample Size")
+```
+
+
+
+

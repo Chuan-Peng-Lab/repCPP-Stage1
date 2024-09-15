@@ -1,0 +1,350 @@
+---
+title: "Preprocess the raw behavioral data"
+output: html_notebook
+---
+
+This script aimed to process the preprocessed data and merge them.
+
+```{r}
+# load package
+# if 'pacman' is not exist, this package can be installed
+if (!require('pacman')) {install.packages('pacman')}
+# the package 'pacman' can use 'p_load' to load existed package or install package
+library(pacman)
+pacman::p_load('tidyverse', # this package used to preprocess the raw data
+               'here', # this package can set the working directory as the root directory the script exist
+               'papaja') # this package can create the manuscripts to APA.
+# set directory
+here::set_here()
+```
+
+# Batch processing of individual data
+
+## exp1
+
+```{r}
+for (i in c(1:6)) {
+  # translate the number as the format '0x'
+  # i = 1
+  idx <- formatC(i, width = 2, flag = "0") 
+  # create the root directory to storage preprocessed data
+  folder_path <- paste('PreData/sub-', formatC(idx, width = 2, flag = "0"), sep = '') 
+  # if not existing the directory, then create it.
+  if(!dir.exists(folder_path)) {dir.create(folder_path)} 
+  
+# the parameter of the exp 1 
+  taskidx <- 1
+  # the name of the file of experiment 1
+  filename <- paste('../2_Data/BIDS/sub-',idx,'/beh/','sub-',idx,'_task-GTDT_run-0',taskidx,'_beh.csv',sep = '') 
+  
+  # clean the raw data of exp1
+  df1 <- read.csv(filename)%>% 
+        filter(!is.na(bg.started))%>% # remove the slide irrelevant of the experiment 
+        mutate(Block=as.factor(blocks.thisTrialN), # the index of each block
+               BlockIndex = as.factor(trials.thisTrialN), # the index in each block
+               SubIndex = c(1:length(trials.thisTrialN))-1, # the index in each experiment
+               CircleStartTime = as.numeric(annular.started), # the start time of circle
+               CircleEndTime = as.numeric(annular.stopped), # the end time of circle
+               SubjIdx = as.factor(idx), # the index of the participant
+               FrameRate = as.factor(frameRate), # the frame rate of the screen 
+               Version = as.factor(psychopyVersion), # the version of the psychopy
+               Rt = gsub("\\[|\\]", "", press.rt), # capture the rt from circle onset
+               SquareStartTime = as.numeric(ssec), # the start time of square
+               SquareEndTime = as.numeric(esec), # the end time of square
+               )%>%
+        select(FrameRate,
+               Version,
+               SubjIdx,
+               Block,
+               BlockIndex,
+               SubIndex,
+               CircleStartTime,
+               CircleEndTime,
+               SquareStartTime,
+               SquareEndTime,
+               Rt
+               )%>%
+        separate(Rt, # separate the rts into different columns
+                 into = paste0("Rt", 1:2), 
+                 sep = ", ", 
+                 remove = T)%>%
+        mutate(Rt1 = as.numeric(Rt1),
+               Rt2 = as.numeric(Rt2),
+               )%>%
+        pivot_longer(cols = c(Rt1, Rt2), 
+                     names_to = "RtTimes", 
+                     names_pattern = "Rt?(.*)",
+                     values_to = "Rt")%>% # separate the rts into different rows
+        filter(!(is.na(Rt)&RtTimes==2))%>% # filter the trial with on response
+    mutate(RtSquare = Rt - SquareStartTime) # calculate the rt from  square onset
+  
+  
+  
+  # calculate the accuracy of of exp1 by each block 
+  df1.acc <- df1 %>%
+    group_by(Block)%>%
+    mutate(acc= ifelse(is.na(Rt),0,ifelse(Rt>1.6,0,1)))%>% # if rt is nan or >= 1.6, rt is 0
+    summarise(acca=mean(acc))%>% # calculate the accuracy of each block
+    ungroup()
+  
+  # add a new column "acc" of each block
+  df1 <- merge(df1, df1.acc, by = "Block") # merge the accuracy and the data by block
+  write.csv(df1,paste('PreData/sub-',idx,'/sub-',idx,'_task-GTDT_run-0',taskidx,'_beh.csv',sep='')) # save the data
+
+  # load the raw data of experiment 1 
+  taskidx <- 2 # this is the number of experiment 2
+  filename <- paste('../2_Data/BIDS/sub-',idx,'/beh/','sub-',idx,'_task-GTDT_run-0',taskidx,'_beh.csv',sep = '')
+  exp1 <- read.csv(filename) # load the data
+  
+  # load the raw data of experiment 2
+  taskidx <- 3 # this is the number of experiment 3
+  filename <- paste('../2_Data/BIDS/sub-',idx,'/beh/','sub-',idx,'_task-GTDT_run-0',taskidx,'_beh.csv',sep = '')
+  exp2 <- read.csv(filename) # load the data
+  
+  # merge the two experiments
+  df <- dplyr::bind_rows(exp1,exp2) # merge the two experiments by rows
+  
+# this is the number of task
+  taskidx <- 2 
+  
+  # select the data of task2
+  df2 <- df %>% # extract the experiment 2 from the merged data, experiment 3 of the column is NA
+    filter(!is.na(key_resp_4.stopped))%>% # remove the slide irrelevant of the experiment 
+    mutate(across(matches("^trials(?:_[0-9]+)?\\.thisTrialN$"),~replace(.,is.na(.),0)), # in this experiment, each block has its own columns, to get the index of the experiment, we need to translate the NA to 0, and accumulated them.
+           BlockIndex = as.numeric(rowSums(across(matches("^trials(?:_[0-9]+)?\\.thisTrialN$")))), # block columns that don't belong to current block has the value 0, accumulated them is the index in each block.
+           SubIndex = as.numeric(c(1:length(trials.thisTrialN))-1), # the index in each experiment
+           across(matches("^annular.(?:_[0-9]+)?\\.started$"),~replace(.,is.na(.),0)), # in this experiment, each block has its own columns, to get the Circle start time of the experiment, we need to translate the NA to 0, and accumulated them.
+           CircleStartTime = as.numeric(rowSums(across(matches("^annular.(?:_[0-9]+)?\\.started$")))), # annular columns that don't belong to current block has the value 0, accumulated them is the annular start in each block.
+           across(matches("^annular.(?:_[0-9]+)?\\stopped$"),~replace(.,is.na(.),0)), # in this experiment, each block has its own columns, to get the Circle end time of the experiment, we need to translate the NA to 0, and accumulated them.
+           CircleEndTime = as.numeric(rowSums(across(matches("^annular.(?:_[0-9]+)?\\stopped$")))), # annular columns that don't belong to current block has the value 0, accumulated them is the annular end in each block.
+           SubjIdx = as.factor(idx), # the index of the participant
+           FrameRate = as.factor(frameRate), # the frame rate of the screen 
+           Version = as.factor(psychopyVersion), # the version of the psychopy
+           Rt = gsub("\\[|\\]", "", key_resp_4.rt), # capture the rt from circle onset
+           Block = as.factor((as.integer(SubIndex - BlockIndex)/25)) # calculate the index of the block, each block has 25 trials.
+           )%>%
+        select(FrameRate,
+               Version,
+               SubjIdx,
+               Block,
+               BlockIndex,
+               SubIndex,
+               CircleStartTime,
+               CircleEndTime,
+               Rt
+               )%>%
+        separate(Rt, # separate the rts into different columns
+                 into = paste0("Rt", 1:2), 
+                 sep = ", ", 
+                 remove = T)%>%
+        mutate(Rt1 = as.numeric(Rt1),
+               Rt2 = as.numeric(Rt2),
+               )%>%
+        pivot_longer(cols = c(Rt1, Rt2), 
+                     names_to = "RtTimes", 
+                     names_pattern = "Rt?(.*)",
+                     values_to = "Rt")%>% # separate the rts into different rows
+        filter(!(is.na(Rt)&RtTimes==2)) # filter the trial with on response
+  
+  # calculate the accuracy of experiment 2
+  df2.acc.2 <- df2 %>%
+    mutate(acc= ifelse(is.na(Rt),0,ifelse(Rt>1.6,0,1)))%>% # if rt is nan or >= 1.6, rt is 0
+    group_by(Block)%>%
+    summarise(acca=mean(acc))%>% # calculate the accuracy of each block
+    ungroup()
+  df2 <- merge(df2, df2.acc.2, by = "Block") # merge the accuracy and the data by block
+  
+  # write the file
+  write.csv(df2,paste('PreData/sub-',idx,'/sub-',idx,'_task-GTDT_run-0',taskidx,'_beh.csv',sep='')) # save the data
+  
+# this is the number of task
+  taskidx <- 3 
+  
+  # select the data of task3
+  df3 <- df %>% # extract the experiment 2 from the merged data, experiment 3 of the column is NA
+    filter(is.na(key_resp_4.stopped)&!is.na(asec))%>% # remove the slide irrelevant of the experiment 
+    mutate(across(matches("^trials(?:_[0-9]+)?\\.thisTrialN$"),~replace(.,is.na(.),0)),# in this experiment, each block has its own columns, to get the index of the experiment, we need to translate the NA to 0, and accumulated them.
+           BlockIndex = as.numeric(rowSums(across(matches("^trials(?:_[0-9]+)?\\.thisTrialN$")))),# block columns that don't belong to current block has the value 0, accumulated them is the index in each block.
+           SubIndex = as.numeric(c(1:length(trials.thisTrialN))-1), # the index in each experiment
+           across(matches("^annular.(?:_[0-9]+)?\\.started$"),~replace(.,is.na(.),0)), # in this experiment, each block has its own columns, to get the Circle start time of the experiment, we need to translate the NA to 0, and accumulated them.
+           CircleStartTime = as.numeric(rowSums(across(matches("^annular.(?:_[0-9]+)?\\.started$")))), # annular columns that don't belong to current block has the value 0, accumulated them is the annular start in each block.
+           across(matches("^annular.(?:_[0-9]+)?\\stopped$"),~replace(.,is.na(.),0)), # in this experiment, each block has its own columns, to get the Circle end time of the experiment, we need to translate the NA to 0, and accumulated them.
+           CircleEndTime = as.numeric(rowSums(across(matches("^annular.(?:_[0-9]+)?\\stopped$")))), # annular columns that don't belong to current block has the value 0, accumulated them is the annular end in each block.
+           SubjIdx = as.factor(idx), # the index of the participant
+           FrameRate = as.factor(frameRate), # the frame rate of the screen 
+           Version = as.factor(psychopyVersion), # the version of the psychopy
+           Block = as.factor(as.integer((SubIndex - BlockIndex)/25)) # calculate the index of the block, each block has 25 trials.
+           )%>%
+        select(FrameRate,
+               Version,
+               SubjIdx,
+               Block,
+               BlockIndex,
+               SubIndex,
+               CircleStartTime,
+               CircleEndTime,
+               )
+  # calculate the count 
+  ct <- df %>% # load the file 
+        filter(!is.na(textbox.text))%>% # remove all slides without textbox
+        mutate(Block=as.factor(c(1:length(trials.thisTrialN))-1))%>%
+        select(Block,
+               textbox.text)
+  
+  # calculate the accuracy
+  bn<-df3%>%group_by(Block)%>%summarise(Count=max(BlockIndex))%>%ungroup()
+  df3.acc <- 1- sum(abs(ct$textbox.text - bn$Count))/sum(bn$Count)# calculate the accuracy, 1 - error rate, error rate is the deviation of actual count and set count
+  #print(df3.acc)
+  # merge the data and accuracy
+  df3 <- merge(df3, ct, by = "Block")%>% # merge the accuracy and the data by block
+        group_by(Block)%>%
+        mutate(BlockIndex = as.numeric(BlockIndex),
+               error = textbox.text - max(BlockIndex)-1)%>% # the deviation of actual count and set count
+        ungroup()%>%
+        arrange(SubIndex)
+  
+  # write the file
+  write.csv(df3,paste('PreData/sub-',idx,'/sub-',idx,'_task-GTDT_run-0',taskidx,'_beh.csv',sep='')) # save the data
+}
+```
+
+
+search all file we wanted and merge them.
+
+# exp1
+```{r}
+df1<-list.files(path = "PreData", pattern = "sub-.*_task-GTDT_run-01_beh.csv", recursive = TRUE, full.names = TRUE)%>%
+  # 对读取到的所有文件x都执行函数read.csv
+  lapply(function(x) read.csv(file.path(x), header = TRUE))%>%
+  bind_rows()
+write.csv(df1,paste('PreData/task-GTDT_run-01_beh.csv',sep=''))
+```
+
+```{r}
+df1.info <- df1 %>%
+  filter(RtTimes==1&!is.na(RtSquare))%>%
+  mutate(Block=as.factor(Block))%>%
+  group_by(SubjIdx,Block)%>%
+  summarise(RtSquare =mean(RtSquare),
+            acc = mean(acca),
+            BlockNumber=max(BlockIndex)+1,
+            NaRate = 1-n()/BlockNumber)%>%
+  ungroup()
+```
+```{r}
+df1.data <- df1 %>%
+  filter(RtTimes==1&!is.na(RtSquare))%>%
+  group_by(SubjIdx)%>%
+  summarise(RtSquare =mean(RtSquare),
+            acc = mean(acca),
+            SubNumber=max(SubIndex)+1,
+            NaRate = 1-n()/SubNumber)%>%
+  ungroup()
+df1.data
+```
+```{r}
+df1.data %>%
+    summarise(RtSquareMean =mean(RtSquare),
+            RtSquareSd =sd(RtSquare),
+            accMean =mean(acc),
+            accSd =sd(acc),
+            naMean =mean(NaRate),
+            naSd =sd(NaRate),)
+```
+```{r}
+nrow(filter(df1,RtTimes==2))/nrow(filter(df1,RtTimes==1))
+```
+
+
+
+
+# exp2
+```{r}
+df2<-list.files(path = "PreData", pattern = "sub-.*_task-GTDT_run-02_beh.csv", recursive = TRUE, full.names = TRUE)%>%
+  # 对读取到的所有文件x都执行函数read.csv
+  lapply(function(x) read.csv(file.path(x), header = TRUE))%>%
+  bind_rows()
+write.csv(df2,paste('PreData/task-GTDT_run-02_beh.csv',sep=''))
+
+```
+
+```{r}
+df2 %>%
+  filter(RtTimes==2)
+nrow(filter(df2,RtTimes==2))/nrow(filter(df2,RtTimes==1))
+
+```
+
+```{r}
+df2.info <- df2 %>%
+  filter(RtTimes==1&!is.na(Rt))%>%
+  mutate(Block=as.factor(Block))%>%
+  group_by(SubjIdx,Block)%>%
+  summarise(Rt =mean(Rt),
+            acc = mean(acca),
+            BlockNumber=max(BlockIndex)+1,
+            NaRate = 1-n()/BlockNumber)%>%
+  ungroup()%>%
+  select(-BlockNumber)
+```
+```{r}
+df2.data <- df2 %>%
+  filter(RtTimes==1&!is.na(Rt))%>%
+  group_by(SubjIdx)%>%
+  summarise(Rt =mean(Rt),
+            acc = mean(acca),
+            SubNumber=max(SubIndex)+1,
+            NaRate = 1-n()/SubNumber)%>%
+  ungroup()
+df2.data
+```
+
+```{r}
+ df2 %>%
+  filter(RtTimes==1&!is.na(Rt))%>%
+```
+
+
+```{r}
+df2.data %>%
+    summarise(RtMean =mean(Rt),
+            RtSd =sd(Rt),
+            accMean =mean(acc),
+            accSd =sd(acc),)
+```
+
+
+
+# exp3
+```{r}
+df3<-list.files(path = "PreData", pattern = "sub-.*_task-GTDT_run-03_beh.csv", recursive = TRUE, full.names = TRUE)%>%
+  # 对读取到的所有文件x都执行函数read.csv
+  lapply(function(x) read.csv(file.path(x), header = TRUE))%>%
+  bind_rows()
+write.csv(df3,paste('PreData/task-GTDT_run-03_beh.csv',sep=''))
+```
+
+
+
+
+```{r}
+df3.info <- df3 %>%
+  mutate(Block=as.factor(Block))%>%
+  group_by(SubjIdx,Block)%>%
+  summarise(error = mean(error),
+            BlockNumber=max(BlockIndex)+1,
+            )%>%
+  ungroup()
+df3.info
+```
+```{r}
+df3.data <- df3.info %>%
+  group_by(SubjIdx)%>%
+  mutate(
+            acc =  1-abs(error)/BlockNumber,
+            )%>%
+  summarise(accmean = mean(acc))%>%
+  ungroup()%>%
+  summarise(accmean = mean(acc))
+df3.data
+```

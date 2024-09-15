@@ -1,0 +1,39 @@
+1、原主机：windows10系统；
+
+2、原显示器：CRT显示器、屏幕刷新率为85HZ、屏幕分辨率为1024×768；
+
+3、目前使用的psychopy版本：v2023.1.0
+
+4、程序文件所在位置：github-->repCPP/Stage1/1_Procedure
+
+5、需要验证的程序文件有：1）GTDT_C1_builder；2）GTDT_C2_builder；3）GTDT_C3_builder；4）GTDT_P1_new；5）GTDT_P2_new；6）GTDT_P3_new
+
+6、*builder.py文件中需要修改的地方：1）刺激呈现电脑的并口端口号--例如，
+bstart = parallel.ParallelPort(address='0x5FB8')，address处修改为新实验室中呈现实验刺激那台电脑的并口端口号；可通过：设备管理器-->LPT-->资源-->I/O范围，来寻找。
+
+
+7.刺激大小的计算：
+
+X：屏幕距离眼睛的距离
+a：视角（角度）
+Y：屏幕上的圆环半径
+
+
+Y = X*tan（(1.14/180)*pi）#角度转弧度
+
+
+内圆a：1.14°
+Y = X*tan（(1.14/180)*pi）
+
+
+外圆a：2.29°
+Y = X*tan((2.29/180)*pi）
+
+
+python计算：
+import math 
+x = 待确定，先用50，后面改
+
+r1 = X*math.tan((1.14/180)*pi) 
+r2 = X*math.tan((2.29/180)*pi) 
+
