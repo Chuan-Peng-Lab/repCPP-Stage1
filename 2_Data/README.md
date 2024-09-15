@@ -1,26 +1,15 @@
 ## Folder Structure
 
 ``````
-└───Meeting
-│
-└───PilotData
-│
-└───RawData
+└───BIDS
+
 
 ``````
 
 
-- Meeting records the meeting minutes, and named as the date of the meeting.
+The dataset contains EEG recordings from six subjects, collected at Shanghai Jiao Tong University (SJTU). The raw data can be downloaded from this link.
 
-
-- PilotData contains two subjects, one is collected at NNU, and one is collected at SJTU. 
-  - sub-001 has enumerous bad electrodes; 
-  - sub-002 hadn't recorded the marker for error port.
-
-
-
-- RawData contains six subjects collected at SJTU, which can be download from [here](https://gofile.me/6V7fC/08WYfdHOj)
-
+Subject Information
 
 |sub|exp1|exp2|exp3|shuffled|
 |:---:|:---:|:---:|:---:|:---:|
@@ -31,4 +20,5 @@
 |sub-005|fixation square, error square marker|grey instruction, 6 blocks|grey instruction, 5 blocks|no|
 |sub-006|fixation square, correct square marker|grey instruction, 6 blocks|grey instruction, 5 blocks|yes|
 
-hcp: where is the scipt that converting raw data into BIDS? has the BIDS format been validated?
+
+
