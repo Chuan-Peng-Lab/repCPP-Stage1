@@ -7,7 +7,7 @@
 ``````
 
 
-The dataset contains EEG recordings from six subjects, collected at Shanghai Jiao Tong University (SJTU). The raw data can be downloaded from this link.
+The dataset contains EEG recordings from six subjects, collected at Shanghai Jiao Tong University (SJTU). The raw data can be downloaded from this link: https://gofile.me/6V7fC/08WYfdHOj.
 
 Subject Information
 
