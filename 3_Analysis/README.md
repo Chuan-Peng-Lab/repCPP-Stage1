@@ -1,43 +1,26 @@
 ## Folder Structure
 
 ``````
-└───PreData
+└───PowerAnalysis_simulation
 │
-└───Reference
+└───1_PsyProprecessed_shuffled
 │
-└───TempResults
+└───2_PsyProprecessed_shuffled_group
 │
-└───Preprocess_1.ipynb
+└───3_MainScript
 │
-└───Preprocess_2.ipynb
+└───4_StatisticalAnalysis
 │
-└───Preprocess_3.ipynb
+└───5_helper_function
 │
-└───Preprocess_v2.ipynb
-│
-└───PsyPreprocessed.Rmd
-│
-└───PsyPreprocessed_v2.Rmd
+└───README
+
 
 
 
 ``````
-
-
-- `PreData` storage the temp data processed by preprocess scripts.
-
-- `Reference` storage the reference guildline for preprocess and analysis.
-
-- `TempResults` storage the temp results processed by preprocess scripts.
-
-- `Preprocess_1.ipynb` is preprocess script for eeg data of exp1.
-
-- `Preprocess_2.ipynb` is preprocess script for eeg data of exp2.
-
-- `Preprocess_3.ipynb` is preprocess script for eeg data of exp3.
-
-- `Preprocess_v2.ipynb` is preprocess script for eeg data of shuffled exp. [hcp: the filename of the scripts has changed]
-
-- `PsyPreprocessed.Rmd` is preprocess script for behavioral data of no shuffled exps.
-
-- `PsyPreprocessed_v2.Rmd` is preprocess script for behavioral data of shuffled exps.
+1_PsyProprecessed_shuffled: This script aimed to process the shuffled blocks of experiment 2 and 3. The experiment 1 has no shuffled blocks. And the script is aimed to process the raw data.
+2_PsyProprecessed_shuffled_group: This script aimed to process the preprocessed data and merge them.
+3_MainScript: These scripts preprocess the EEG data and extract ERP.
+4_StatisticalAnalysis: Holds scripts dedicated to statistical testing and analysis. 
+5_helper_function: Contains helper functions used in the main scripts to simplify tasks like data loading, transformation, and visualization.
